@@ -1,6 +1,6 @@
 #include "project.h"
 #include "Generated_Source/PSoC5/I2C.h"
-#include "vl53l4cd_template.h"
+#include "vl53l0x_template.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -65,15 +65,15 @@ static bool example_address_is_bno(uint8_t address)
     return (address == 0x28u) || (address == 0x29u);
 }
 
-static bool example_verify_vl53_device(vl53l4cd_template_t *ctx, uint8_t address)
+static bool example_verify_vl53_device(vl53l0x_template_t *ctx, uint8_t address)
 {
-    uint8_t frame[VL53L4CD_RANGING_FRAME_SIZE];
+    uint8_t frame[VL53L0X_RANGING_FRAME_SIZE];
 
     if (ctx == NULL) {
         return false;
     }
 
-    if (vl53l4cd_template_send_simple(ctx, address, VL53L4CD_CMD_GET_EEPROM_DATA) != VL53L4CD_OK) {
+    if (vl53l0x_template_send_simple(ctx, address, VL53L0X_CMD_GET_EEPROM_DATA) != VL53L0X_OK) {
         return false;
     }
 
@@ -81,7 +81,7 @@ static bool example_verify_vl53_device(vl53l4cd_template_t *ctx, uint8_t address
         ctx->cfg.delay_ms(20u, ctx->cfg.user_ctx);
     }
 
-    if (vl53l4cd_template_read_ranging_frame(ctx, address, frame, (uint8_t)sizeof(frame)) != VL53L4CD_OK) {
+    if (vl53l0x_template_read_ranging_frame(ctx, address, frame, (uint8_t)sizeof(frame)) != VL53L0X_OK) {
         return false;
     }
 
@@ -124,7 +124,7 @@ static uint8_t example_scan_i2c_devices(uint8_t *addresses, uint8_t max_count)
     return count;
 }
 
-static uint8_t example_filter_vl53_devices(vl53l4cd_template_t *ctx, uint8_t *addresses, uint8_t count)
+static uint8_t example_filter_vl53_devices(vl53l0x_template_t *ctx, uint8_t *addresses, uint8_t count)
 {
     uint8_t read_index;
     uint8_t write_index = 0u;
@@ -144,11 +144,11 @@ static uint8_t example_filter_vl53_devices(vl53l4cd_template_t *ctx, uint8_t *ad
 
 int main(void)
 {
-    vl53l4cd_template_t sensor;
-    vl53l4cd_template_cfg_t cfg;
-    vl53l4cd_measurement_t measurement;
-    vl53l4cd_measurement_t measurements[EXAMPLE_MAX_SENSORS];
-    vl53l4cd_status_t statuses[EXAMPLE_MAX_SENSORS];
+    vl53l0x_template_t sensor;
+    vl53l0x_template_cfg_t cfg;
+    vl53l0x_measurement_t measurement;
+    vl53l0x_measurement_t measurements[EXAMPLE_MAX_SENSORS];
+    vl53l0x_status_t statuses[EXAMPLE_MAX_SENSORS];
     uint16_t attempts = 0u;
     uint16_t all_attempts[EXAMPLE_MAX_SENSORS];
     uint8_t sensor_addresses[EXAMPLE_MAX_SENSORS];
@@ -167,7 +167,7 @@ int main(void)
     cfg.poll_interval_ms = 10u;
     cfg.max_poll_count = 100u;
 
-    if (vl53l4cd_template_init(&sensor, &cfg) != VL53L4CD_OK) {
+    if (vl53l0x_template_init(&sensor, &cfg) != VL53L0X_OK) {
         printf("Template init failed\r\n");
         for(;;) {
         }
@@ -194,33 +194,33 @@ int main(void)
         }
     }
 
-    if (vl53l4cd_template_get_measurement(&sensor, sensor_addresses[0], VL53L4CD_UNIT_MM, &measurement, &attempts) == VL53L4CD_OK) {
+    if (vl53l0x_template_get_measurement(&sensor, sensor_addresses[0], VL53L0X_UNIT_MM, &measurement, &attempts) == VL53L0X_OK) {
         printf("Single: range=%u mm status=%u (%s) attempts=%u\r\n",
                measurement.range_mm,
                measurement.status,
-               vl53l4cd_template_status_text(measurement.status),
+               vl53l0x_template_status_text(measurement.status),
                attempts);
     } else {
         printf("Single[0x%02X]: failed\r\n", sensor_addresses[0]);
     }
 
-    (void)vl53l4cd_template_get_measurements(
+    (void)vl53l0x_template_get_measurements(
         &sensor,
         sensor_addresses,
         sensor_count,
-        VL53L4CD_UNIT_MM,
+        VL53L0X_UNIT_MM,
         measurements,
         all_attempts,
         statuses
     );
 
     for (index = 0u; index < sensor_count; index++) {
-        if (statuses[index] == VL53L4CD_OK) {
+        if (statuses[index] == VL53L0X_OK) {
             printf("All[0x%02X]: range=%u mm status=%u (%s) attempts=%u\r\n",
                    sensor_addresses[index],
                    measurements[index].range_mm,
                    measurements[index].status,
-                   vl53l4cd_template_status_text(measurements[index].status),
+                   vl53l0x_template_status_text(measurements[index].status),
                    all_attempts[index]);
         } else {
             printf("All[0x%02X]: failed (%d)\r\n",

@@ -1,11 +1,11 @@
-#include "vl53l4cd_template.h"
+#include "vl53l0x_template.h"
 
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 
 static bool demo_read_valid_simultaneous_frame(
-    vl53l4cd_template_t *ctx,
+    vl53l0x_template_t *ctx,
     uint8_t dev_address,
     uint8_t *frame,
     uint8_t frame_len
@@ -18,11 +18,11 @@ static bool demo_read_valid_simultaneous_frame(
     }
 
     for (attempt = 0u; attempt < ctx->cfg.max_poll_count; attempt++) {
-        if (vl53l4cd_template_read_ranging_frame(ctx, dev_address, frame, frame_len) != VL53L4CD_OK) {
+        if (vl53l0x_template_read_ranging_frame(ctx, dev_address, frame, frame_len) != VL53L0X_OK) {
             return false;
         }
 
-        if (vl53l4cd_template_status_is_accepted(frame[2])) {
+        if (vl53l0x_template_status_is_accepted(frame[2])) {
             return true;
         }
 
@@ -59,7 +59,7 @@ static void demo_print_ranging_frame(
     ambient_kcps = (uint16_t)(((uint16_t)frame[5] << 8) | frame[6]);
     sigma_mm = (uint16_t)(((uint16_t)frame[7] << 8) | frame[8]);
 
-    if (vl53l4cd_template_status_is_accepted(status)) {
+    if (vl53l0x_template_status_is_accepted(status)) {
         if (status == 3u) {
             range_mm = 0u;
         } else if ((status == 2u) || (status == 4u) || (status == 12u)) {
@@ -69,16 +69,16 @@ static void demo_print_ranging_frame(
 
     printf("  [0x%02X] range=%u status=%u (%s) signal=%u ambient=%u sigma=%u\r\n",
            dev_address,
-           vl53l4cd_template_convert_range(range_mm, units),
+           vl53l0x_template_convert_range(range_mm, units),
            status,
-           vl53l4cd_template_status_text(status),
+           vl53l0x_template_status_text(status),
            signal_kcps,
            ambient_kcps,
            sigma_mm);
 }
 
-void vl53l4cd_template_demo_run(
-    vl53l4cd_template_t *ctx,
+void vl53l0x_template_demo_run(
+    vl53l0x_template_t *ctx,
     uint8_t dev_address,
     uint8_t units,
     uint16_t period_ms,
@@ -93,15 +93,15 @@ void vl53l4cd_template_demo_run(
 
     /* One-shot sample */
     {
-        vl53l4cd_measurement_t m;
+        vl53l0x_measurement_t m;
         uint16_t attempts = 0u;
-        if (vl53l4cd_template_get_measurement(ctx, dev_address, units, &m, &attempts) == VL53L4CD_OK) {
+        if (vl53l0x_template_get_measurement(ctx, dev_address, units, &m, &attempts) == VL53L0X_OK) {
             printf("[one-shot] range=%u status=%u signal=%u ambient=%u sigma=%u attempts=%u\r\n",
-                   vl53l4cd_template_convert_range(m.range_mm, units),
+                   vl53l0x_template_convert_range(m.range_mm, units),
                    m.status,
                    m.signal_kcps,
                    m.ambient_kcps,
-                   m.sigma_mm,
+                   m.spad_count,
                    attempts);
         } else {
             printf("[one-shot] failed\r\n");
@@ -110,17 +110,17 @@ void vl53l4cd_template_demo_run(
 
     /* Continuous sample loop */
     for (i = 0u; i < max_samples; i++) {
-        vl53l4cd_measurement_t m;
+        vl53l0x_measurement_t m;
         uint16_t attempts = 0u;
-        if (vl53l4cd_template_get_measurement(ctx, dev_address, units, &m, &attempts) == VL53L4CD_OK) {
+        if (vl53l0x_template_get_measurement(ctx, dev_address, units, &m, &attempts) == VL53L0X_OK) {
             printf("[continuous %u/%u] range=%u status=%u signal=%u ambient=%u sigma=%u attempts=%u\r\n",
                    (unsigned int)(i + 1u),
                    (unsigned int)max_samples,
-                   vl53l4cd_template_convert_range(m.range_mm, units),
+                   vl53l0x_template_convert_range(m.range_mm, units),
                    m.status,
                    m.signal_kcps,
                    m.ambient_kcps,
-                   m.sigma_mm,
+                   m.spad_count,
                    attempts);
         } else {
             printf("[continuous %u/%u] failed\r\n",
@@ -134,8 +134,8 @@ void vl53l4cd_template_demo_run(
     }
 }
 
-void vl53l4cd_template_demo_run_all(
-    vl53l4cd_template_t *ctx,
+void vl53l0x_template_demo_run_all(
+    vl53l0x_template_t *ctx,
     const uint8_t *dev_addresses,
     uint8_t dev_count,
     uint8_t units,
@@ -144,9 +144,9 @@ void vl53l4cd_template_demo_run_all(
 )
 {
     uint16_t cycle;
-    vl53l4cd_measurement_t measurements[16];
+    vl53l0x_measurement_t measurements[16];
     uint16_t attempts[16];
-    vl53l4cd_status_t statuses[16];
+    vl53l0x_status_t statuses[16];
 
     if ((ctx == NULL) || (dev_addresses == NULL) || (dev_count == 0u) || (max_cycles == 0u) || (dev_count > 16u)) {
         return;
@@ -159,7 +159,7 @@ void vl53l4cd_template_demo_run_all(
                (unsigned int)(cycle + 1u),
                (unsigned int)max_cycles);
 
-        (void)vl53l4cd_template_get_measurements(
+        (void)vl53l0x_template_get_measurements(
             ctx,
             dev_addresses,
             dev_count,
@@ -170,15 +170,15 @@ void vl53l4cd_template_demo_run_all(
         );
 
         for (index = 0u; index < dev_count; index++) {
-            if (statuses[index] == VL53L4CD_OK) {
-                printf("  [0x%02X] range=%u status=%u (%s) signal=%u ambient=%u sigma=%u attempts=%u\r\n",
+            if (statuses[index] == VL53L0X_OK) {
+                printf("  [0x%02X] range=%u status=%u (%s) signal=%u ambient=%u spad=%u attempts=%u\r\n",
                        dev_addresses[index],
-                       vl53l4cd_template_convert_range(measurements[index].range_mm, units),
+                       vl53l0x_template_convert_range(measurements[index].range_mm, units),
                        measurements[index].status,
-                       vl53l4cd_template_status_text(measurements[index].status),
+                       vl53l0x_template_status_text(measurements[index].status),
                        measurements[index].signal_kcps,
                        measurements[index].ambient_kcps,
-                       measurements[index].sigma_mm,
+                       measurements[index].spad_count,
                        attempts[index]);
             } else {
                 printf("  [0x%02X] failed (%d)\r\n", dev_addresses[index], (int)statuses[index]);
@@ -191,8 +191,8 @@ void vl53l4cd_template_demo_run_all(
     }
 }
 
-void vl53l4cd_template_demo_run_all_simultaneous(
-    vl53l4cd_template_t *ctx,
+void vl53l0x_template_demo_run_all_simultaneous(
+    vl53l0x_template_t *ctx,
     const uint8_t *dev_addresses,
     uint8_t dev_count,
     uint8_t units,
@@ -220,7 +220,7 @@ void vl53l4cd_template_demo_run_all_simultaneous(
 
         for (index = 0u; index < dev_count; index++) {
             uint8_t tx[2];
-            tx[0] = VL53L4CD_CMD_GET_RANGING_RESULT;
+            tx[0] = VL53L0X_CMD_GET_RANGING_RESULT;
             tx[1] = units;
 
             if (ctx->cfg.i2c_write(dev_addresses[index], tx, (uint8_t)sizeof(tx), ctx->cfg.user_ctx) != 0u) {
@@ -233,7 +233,7 @@ void vl53l4cd_template_demo_run_all_simultaneous(
         }
 
         for (index = 0u; index < dev_count; index++) {
-            uint8_t frame[VL53L4CD_RANGING_FRAME_SIZE];
+            uint8_t frame[VL53L0X_RANGING_FRAME_SIZE];
 
             if (demo_read_valid_simultaneous_frame(ctx, dev_addresses[index], frame, (uint8_t)sizeof(frame))) {
                 demo_print_ranging_frame(
