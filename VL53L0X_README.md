@@ -1,6 +1,6 @@
-# VL53L4CD Board and API library Description
+# VL53L0X Board and API Library
 
-- The VL53L4CD breakout board exposes power and I2C through connector J1 and includes onboard weak I2C pull-ups that can be disconnected when using external pull-ups.
+- The VL53L0X breakout board exposes power and I2C through connector J1 and includes onboard weak I2C pull-ups that can be disconnected when using external pull-ups.
 
 ## Board Images
 
@@ -24,15 +24,15 @@
 
 R1 and R2 are weak (10K) pull-ups. If you plan to use external pull-ups, cut jumpers J2 and J3.
 
-## VL53L4CD Reusable Template Module
+## VL53L0X Reusable Template Module
 
-This folder now includes a reusable C module that can be copied into other projects using the same VL53L4CD I2C template API protocol.
+This folder includes a reusable C module for the VL53L0X command protocol implemented by the target device firmware. It is not a drop-in replacement for ST's native VL53L0X API; verify that the device firmware uses the commands and ranging-frame format described here.
 
 Files:
 
-- `vl53l4cd_template.h`
-- `vl53l4cd_template.c`
-- `vl53l4cd_template_demo.c`
+- `vl53l0x_template.h`
+- `vl53l0x_template.c`
+- `vl53l0x_template_demo.c`
 
 The template is transport-agnostic: it does not include platform-specific headers. You inject platform behavior using callbacks for I2C read/write and optional delay.
 
@@ -47,23 +47,26 @@ The template API wraps the same protocol already used in this project:
 - `0x03`: start xtalk calibration
 - `0x04`: get EEPROM data
 - `0x05`: restore factory config
-- `0x07`: set sigma/signal thresholds
+- `0x07`: set pre-range and final-range VCSEL periods
 - `0x08`: restart
 
-It also parses ranging frames in the same layout used by your existing `main.c`:
+`vl53l0x_template_get_measurement` requests and parses a 20-byte ranging frame. `vl53l0x_template_read_ranging_frame` reads the caller-requested length and requires at least 15 bytes. The fields used by the template and demo are:
 
 - bytes `[0..1]`: range (mm, big-endian)
 - byte `[2]`: status
 - bytes `[3..4]`: signal (kcps)
 - bytes `[5..6]`: ambient (kcps)
 - bytes `[7..8]`: sigma (mm)
+- bytes `[9..10]`: ambient per SPAD
+- bytes `[11..12]`: signal per SPAD
+- bytes `[13..14]`: SPAD count
 
 ## Quick Start
 
-1. Copy `vl53l4cd_template.h` and `vl53l4cd_template.c` into the new project.
+1. Copy `vl53l0x_template.h` and `vl53l0x_template.c` into the new project; include the header and compile the C file.
 2. Add the files to the project build.
 3. Implement the callback wrappers for your I2C driver.
-4. Initialize `vl53l4cd_template_t` once.
+4. Initialize `vl53l0x_template_t` once.
 5. Use the high-level template API functions for actions and ranging.
 
 ## Example: PSoC Creator Integration
@@ -71,7 +74,7 @@ It also parses ranging frames in the same layout used by your existing `main.c`:
 This snippet shows a typical integration with PSoC Creator I2C APIs.
 
 ```c
-#include "vl53l4cd_template.h"
+#include "vl53l0x_template.h"
 #include "Generated_Source/PSoC5/I2C.h"
 #include <project.h>
 
@@ -125,9 +128,9 @@ static void psoc_delay_ms(uint16_t delay_ms, void *user_ctx)
 
 void app_init(void)
 {
-    vl53l4cd_template_t sensor;
-    vl53l4cd_template_cfg_t cfg;
-    vl53l4cd_measurement_t m;
+    vl53l0x_template_t sensor;
+    vl53l0x_template_cfg_t cfg;
+    vl53l0x_measurement_t m;
     uint16_t attempts;
 
     cfg.i2c_write = psoc_i2c_write;
@@ -138,11 +141,11 @@ void app_init(void)
     cfg.poll_interval_ms = 10u;
     cfg.max_poll_count = 100u;
 
-    if (vl53l4cd_template_init(&sensor, &cfg) != VL53L4CD_OK) {
+    if (vl53l0x_template_init(&sensor, &cfg) != VL53L0X_OK) {
         return;
     }
 
-    if (vl53l4cd_template_get_measurement(&sensor, 0x70u, VL53L4CD_UNIT_MM, &m, &attempts) == VL53L4CD_OK) {
+    if (vl53l0x_template_get_measurement(&sensor, 0x70u, VL53L0X_UNIT_MM, &m, &attempts) == VL53L0X_OK) {
         uint16_t value_mm = m.range_mm;
         (void)value_mm;
     }
@@ -156,7 +159,7 @@ This snippet shows using the template with Arduino `Wire` and `delay`.
 ```c
 #include <Arduino.h>
 #include <Wire.h>
-#include "vl53l4cd_template.h"
+#include "vl53l0x_template.h"
 
 static uint8_t arduino_i2c_write(uint8_t address, const uint8_t *tx, uint8_t tx_len, void *user_ctx)
 {
@@ -194,8 +197,8 @@ static void arduino_delay_ms(uint16_t delay_ms, void *user_ctx)
 
 void sensor_setup_example(void)
 {
-    static vl53l4cd_template_t sensor;
-    vl53l4cd_template_cfg_t cfg;
+    static vl53l0x_template_t sensor;
+    vl53l0x_template_cfg_t cfg;
 
     Wire.begin();
 
@@ -207,7 +210,7 @@ void sensor_setup_example(void)
     cfg.poll_interval_ms = 10u;
     cfg.max_poll_count = 100u;
 
-    (void)vl53l4cd_template_init(&sensor, &cfg);
+    (void)vl53l0x_template_init(&sensor, &cfg);
 }
 ```
 
@@ -216,7 +219,7 @@ void sensor_setup_example(void)
 This snippet shows a generic wrapper style where your board support package (BSP) provides low-level I2C and delay functions.
 
 ```c
-#include "vl53l4cd_template.h"
+#include "vl53l0x_template.h"
 #include "bsp_i2c.h"
 #include "bsp_time.h"
 
@@ -247,8 +250,8 @@ static void generic_delay_ms(uint16_t delay_ms, void *user_ctx)
 void app_sensor_init(void)
 {
     static app_i2c_ctx_t i2c_ctx = { .bus_id = 1 };
-    static vl53l4cd_template_t sensor;
-    vl53l4cd_template_cfg_t cfg = {
+    static vl53l0x_template_t sensor;
+    vl53l0x_template_cfg_t cfg = {
         .i2c_write = generic_i2c_write,
         .i2c_read = generic_i2c_read,
         .delay_ms = generic_delay_ms,
@@ -258,7 +261,7 @@ void app_sensor_init(void)
         .max_poll_count = 100u
     };
 
-    (void)vl53l4cd_template_init(&sensor, &cfg);
+    (void)vl53l0x_template_init(&sensor, &cfg);
 }
 ```
 
@@ -266,36 +269,36 @@ void app_sensor_init(void)
 
 Initialization:
 
-- `vl53l4cd_template_init`
+- `vl53l0x_template_init`
 
 Core template API helpers:
 
-- `vl53l4cd_template_send_simple`
-- `vl53l4cd_template_set_new_address`
-- `vl53l4cd_template_set_ranging_timing`
-- `vl53l4cd_template_start_offset_cal`
-- `vl53l4cd_template_start_xtalk_cal`
-- `vl53l4cd_template_set_thresholds`
+- `vl53l0x_template_send_simple`
+- `vl53l0x_template_set_new_address`
+- `vl53l0x_template_set_ranging_timing`
+- `vl53l0x_template_start_offset_cal`
+- `vl53l0x_template_start_xtalk_cal`
+- `vl53l0x_template_set_vcsel_periods`
 
 Ranging:
 
-- `vl53l4cd_template_read_ranging_frame`
-- `vl53l4cd_template_get_measurement`
-- `vl53l4cd_template_get_measurements`
+- `vl53l0x_template_read_ranging_frame`
+- `vl53l0x_template_get_measurement`
+- `vl53l0x_template_get_measurements`
 
 Utilities:
 
-- `vl53l4cd_template_status_is_accepted`
-- `vl53l4cd_template_status_text`
-- `vl53l4cd_template_convert_range`
+- `vl53l0x_template_status_is_accepted`
+- `vl53l0x_template_status_text`
+- `vl53l0x_template_convert_range`
 
 ## Demo Function (One-Shot + Continuous)
 
-The file `vl53l4cd_template_demo.c` includes two minimal entry points:
+The file `vl53l0x_template_demo.c` includes two minimal entry points:
 
-- `vl53l4cd_template_demo_run(...)`
-- `vl53l4cd_template_demo_run_all(...)`
-- `vl53l4cd_template_demo_run_all_simultaneous(...)`
+- `vl53l0x_template_demo_run(...)`
+- `vl53l0x_template_demo_run_all(...)`
+- `vl53l0x_template_demo_run_all_simultaneous(...)`
 
 Behavior:
 
@@ -307,7 +310,7 @@ Behavior:
 Example call:
 
 ```c
-vl53l4cd_template_demo_run(&sensor, 0x70u, VL53L4CD_UNIT_MM, 200u, 20u);
+vl53l0x_template_demo_run(&sensor, 0x70u, VL53L0X_UNIT_MM, 200u, 20u);
 ```
 
 Short simultaneous usage snippet:
@@ -316,11 +319,11 @@ Short simultaneous usage snippet:
 static const uint8_t sensor_addresses[] = { 0x70u, 0x71u, 0x72u };
 
 /* One cycle: send start to all devices, wait once, then read all results. */
-vl53l4cd_template_demo_run_all_simultaneous(
+vl53l0x_template_demo_run_all_simultaneous(
     &sensor,
     sensor_addresses,
     (uint8_t)(sizeof(sensor_addresses) / sizeof(sensor_addresses[0])),
-    VL53L4CD_UNIT_MM,
+    VL53L0X_UNIT_MM,
     35u,  /* wait_ms: longest timebudget + guard */
     200u, /* period_ms between cycles */
     10u   /* max_cycles */
@@ -335,19 +338,19 @@ Direct template API example:
 
 ```c
 static const uint8_t sensor_addresses[] = { 0x70u, 0x71u, 0x72u };
-vl53l4cd_measurement_t measurements[3];
+vl53l0x_measurement_t measurements[3];
 uint16_t attempts[3];
-vl53l4cd_status_t statuses[3];
+vl53l0x_status_t statuses[3];
 
-if (vl53l4cd_template_get_measurements(
+if (vl53l0x_template_get_measurements(
         &sensor,
         sensor_addresses,
         (uint8_t)(sizeof(sensor_addresses) / sizeof(sensor_addresses[0])),
-        VL53L4CD_UNIT_MM,
+        VL53L0X_UNIT_MM,
         measurements,
         attempts,
         statuses
-    ) != VL53L4CD_OK) {
+    ) != VL53L0X_OK) {
     /* At least one device failed. Inspect statuses[i]. */
 }
 ```
@@ -357,11 +360,11 @@ Demo helper example:
 ```c
 static const uint8_t sensor_addresses[] = { 0x70u, 0x71u, 0x72u };
 
-vl53l4cd_template_demo_run_all(
+vl53l0x_template_demo_run_all(
     &sensor,
     sensor_addresses,
     (uint8_t)(sizeof(sensor_addresses) / sizeof(sensor_addresses[0])),
-    VL53L4CD_UNIT_MM,
+    VL53L0X_UNIT_MM,
     200u,
     10u
 );
@@ -372,25 +375,22 @@ Behavior:
 - Runs `10` acquisition cycles
 - Reads devices `0x70`, `0x71`, and `0x72` in each cycle
 - Waits `200 ms` between cycles
-- Prints range, status text, signal, ambient, sigma, and poll attempts for each device
+- Prints range, status text, signal, ambient, SPAD count, and poll attempts for each device
 - The reusable bulk helper fills one measurement, attempt counter, and status per address
 
 This makes it easy to validate integration quickly in a new project before wiring your full application logic.
 
-## Status Handling Behavior
+## Polling and Status Behavior
 
-`vl53l4cd_template_get_measurement` follows your current logic:
+`vl53l0x_template_get_measurement` does not validate or filter measurement status codes. It retries only when the received range and status are both `0xFFFF` and `0xFF`, respectively. An I2C callback error returns `VL53L0X_ERR_IO`; exhausting `max_poll_count` with only sentinel frames returns `VL53L0X_ERR_TIMEOUT`.
 
-- Accepted statuses: `0`, `1`, `2`, `3`, `4`, `12`
-- For status `3` (`BELOW_THRESHOLD`), returned range is forced to `0`
-- For status `2` (`SIGNAL_LOW`), `4` (`PHASE_OUT_OF_LIMIT`), and `12` (`SIGNAL_TOO_LOW`), returned range is forced to `max_range_mm`
-- Any other status keeps polling until `max_poll_count` is reached
+`vl53l0x_template_status_is_accepted` currently returns `true` for every status. The demo therefore reports status text without rejecting measurements. `vl53l0x_template_convert_range` currently returns the supplied range unchanged; it does not convert between millimeters, centimeters, and inches. The `VL53L0X_UNIT_*` value is sent to the target as part of the ranging command, so confirm its meaning with the target firmware.
 
 ## Porting Checklist for a New Project
 
-- Add both template files to the project.
+- Add `vl53l0x_template.h` and `vl53l0x_template.c` to the project; add `vl53l0x_template_demo.c` only if using the demo helpers.
 - Ensure callbacks return `0` on success.
-- Confirm device I2C address (default in this project was `0x70`).
+- Confirm the device I2C address. The examples use `0x70` and `0x71`/`0x72` for additional devices; these are example values, not detected or enforced defaults.
 - Confirm the template API command-ID mapping of your target slave firmware.
 - Tune `poll_interval_ms`, `max_poll_count`, and `max_range_mm` to your system.
 - Route the parsed result to your application logging or telemetry.
@@ -400,4 +400,3 @@ This makes it easy to validate integration quickly in a new project before wirin
 - This module is plain C and does not depend on dynamic memory.
 - It is safe to keep one context per sensor/device instance.
 - If your new target uses a different protocol framing, adapt only this module and keep application code unchanged.
-
