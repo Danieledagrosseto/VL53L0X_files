@@ -152,6 +152,43 @@ void app_init(void)
 }
 ```
 
+### Change the I2C address (PSoC Creator)
+
+In this example, `0x70` is the sensor's current 7-bit address and `0x71` is
+the new address; replace them with your current address and an unused,
+firmware-supported address. Add this after `vl53l0x_template_init` succeeds
+in `app_init` above:
+
+```c
+    const uint8_t old_address = 0x70u;
+    const uint8_t new_address = 0x71u;
+
+    if (vl53l0x_template_set_new_address(&sensor, old_address, new_address) != VL53L0X_OK) {
+        printf("Address change command failed\r\n");
+        return;
+    }
+
+    CyDelay(20u);
+    if (vl53l0x_template_get_measurement(
+            &sensor,
+            new_address,
+            VL53L0X_UNIT_MM,
+            &m,
+            &attempts
+        ) != VL53L0X_OK) {
+        printf("Sensor did not respond at the new address\r\n");
+        return;
+    }
+    printf("Sensor responds at 0x%02X\r\n", new_address);
+```
+
+After a successful change, use the new address for subsequent I2C operations.
+The API sends the address-change sequence to the old address; both values are
+7-bit addresses and must not be shifted. If multiple sensors share the old
+address, isolate or disable the other sensors while changing it, or they may
+all receive the command. Whether the new address survives a reset depends on
+the target firmware.
+
 ## Arduino UNO R3: First Measurement
 
 ### Wire the breakout
@@ -354,6 +391,51 @@ Range: 245 mm, status: 0, sigma: 12 mm, SPAD count: 20, attempts: 1
 Range, status, sigma, SPAD count, and attempt count depend on the target and
 scene. API error `2` is `VL53L0X_ERR_IO`, meaning an I2C read or write failed.
 Check the detected address, `SENSOR_ADDRESS`, and the wiring.
+
+### Change the I2C address (Arduino)
+
+Use the Arduino callbacks and initialized `sensor` from the first-measurement
+sketch. Set `old_address` to the address currently found by the scanner and
+`new_address` to an unused address supported by your target firmware. In
+`setup`, after `vl53l0x_template_init` succeeds, run:
+
+```cpp
+    const uint8_t old_address = 0x70u;
+    const uint8_t new_address = 0x71u;
+
+    status = vl53l0x_template_set_new_address(&sensor, old_address, new_address);
+    if (status != VL53L0X_OK) {
+        Serial.print("Address change command failed: ");
+        Serial.println((int)status);
+        return;
+    }
+
+    delay(20u);
+
+    vl53l0x_measurement_t measurement;
+    uint16_t attempts = 0u;
+    status = vl53l0x_template_get_measurement(
+        &sensor,
+        new_address,
+        VL53L0X_UNIT_MM,
+        &measurement,
+        &attempts
+    );
+    if (status != VL53L0X_OK) {
+        Serial.println("Sensor did not respond at the new address");
+        return;
+    }
+
+    Serial.print("Sensor responds at 0x");
+    Serial.println(new_address, HEX);
+```
+
+For later measurements, change `SENSOR_ADDRESS` in the first-measurement
+sketch to `0x71u` (or the new value you chose). Both addresses are unshifted
+7-bit values. The address-change sequence is sent to the old address, so
+change only one sensor at a time if multiple devices currently share that
+address. The new address's persistence across reset is determined by the
+target firmware.
 
 ## Example: Generic C Platform Integration
 
