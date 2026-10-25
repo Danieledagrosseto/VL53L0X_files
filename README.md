@@ -40,7 +40,9 @@ The breakout exposes power and I2C through connector J1. It has onboard weak 10 
 4. Fill a `vl53l0x_template_cfg_t` with the callbacks and polling configuration, then call `vl53l0x_template_init`.
 5. Use the measurement or command functions with the device's I2C address.
 
-See [`example_main.c`](example_main.c) for a PSoC Creator integration example.
+See [`example_main.c`](example_main.c) for a PSoC Creator integration example,
+or [`VL53L0X_README.md`](VL53L0X_README.md) for wiring, I2C address scanning,
+and a complete Arduino UNO R3 first-measurement walkthrough.
 
 ## API Highlights
 
@@ -52,4 +54,6 @@ See [`example_main.c`](example_main.c) for a PSoC Creator integration example.
 - `vl53l0x_template_set_vcsel_periods`
 - `vl53l0x_template_status_text` and `vl53l0x_template_convert_range`
 
-The parsed measurement includes range, status, signal and ambient rates, ambient and signal rates per SPAD, and SPAD count. The template supports ranges in millimeters, centimeters, or inches.
+The parsed measurement includes range, status, signal and ambient rates, sigma,
+ambient and signal rates per SPAD, and SPAD count. Range conversion helpers
+support millimeters, centimeters, and inches.

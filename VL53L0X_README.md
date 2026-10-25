@@ -152,16 +152,99 @@ void app_init(void)
 }
 ```
 
-## Example: Arduino Integration
+## Arduino UNO R3: First Measurement
 
-This snippet shows using the template with Arduino `Wire` and `delay`.
+### Wire the breakout
 
-```c
+With the sensor and Arduino disconnected from power, connect:
+
+| Arduino UNO R3 | Breakout J1 |
+| --- | --- |
+| 5V | Pin 1 — VDD |
+| A4 / SDA | Pin 2 — SDA |
+| A5 / SCL | Pin 3 — SCL |
+| GND | Pin 5 — GND |
+| Not connected | Pin 4 — NU |
+
+The breakout accepts 3 V to 5.5 V at VDD. Other Arduino models may use
+different I2C pins; check the board pinout before wiring.
+
+### Create the sketch
+
+In Arduino IDE, create a sketch named `VL53L0X_FirstMeasurement` and save it.
+Copy `vl53l0x_template.c` and `vl53l0x_template.h` from this folder into the
+sketch folder, then replace the contents of
+`VL53L0X_FirstMeasurement.ino` with the measurement example below. Select
+**Arduino Uno** and the correct serial port. Open Serial Monitor at **115200
+baud** after uploading.
+
+### Find the sensor's I2C address
+
+I2C addresses are 7-bit values and may have been changed on the board. Do not
+assume a particular address. Upload this temporary scanner and open Serial
+Monitor at 115200 baud:
+
+```cpp
+#include <Wire.h>
+
+void setup()
+{
+    Wire.begin();
+    Serial.begin(115200);
+    while (!Serial) {
+    }
+    Serial.println("I2C scan");
+}
+
+void loop()
+{
+    uint8_t found = 0u;
+
+    for (uint8_t address = 0x08u; address <= 0x7Fu; ++address) {
+        Wire.beginTransmission(address);
+        if (Wire.endTransmission() == 0u) {
+            Serial.print("Device found at 0x");
+            if (address < 0x10u) {
+                Serial.print('0');
+            }
+            Serial.println(address, HEX);
+            ++found;
+        }
+    }
+
+    if (found == 0u) {
+        Serial.println("No I2C devices found");
+    }
+    delay(2000u);
+}
+```
+
+The scanner finds devices that acknowledge on the bus; it does not identify
+their type. If no address appears, check power, SDA/SCL wiring, and the
+selected port. Use the sensor's reported address as `SENSOR_ADDRESS` in the
+full sketch below, without shifting it.
+
+### Upload the measurement sketch
+
+The example uses `0x70` as a placeholder address; change `SENSOR_ADDRESS` to
+the value reported by your scan.
+
+```cpp
 #include <Arduino.h>
 #include <Wire.h>
 #include "vl53l0x_template.h"
 
-static uint8_t arduino_i2c_write(uint8_t address, const uint8_t *tx, uint8_t tx_len, void *user_ctx)
+#define SENSOR_ADDRESS ((uint8_t)0x70u)
+
+static vl53l0x_template_t sensor;
+static bool sensor_ready = false;
+
+static uint8_t arduino_i2c_write(
+    uint8_t address,
+    const uint8_t *tx,
+    uint8_t tx_len,
+    void *user_ctx
+)
 {
     TwoWire *wire = (TwoWire *)user_ctx;
     wire->beginTransmission(address);
@@ -171,7 +254,12 @@ static uint8_t arduino_i2c_write(uint8_t address, const uint8_t *tx, uint8_t tx_
     return (written == tx_len && end_status == 0u) ? 0u : 1u;
 }
 
-static uint8_t arduino_i2c_read(uint8_t address, uint8_t *rx, uint8_t rx_len, void *user_ctx)
+static uint8_t arduino_i2c_read(
+    uint8_t address,
+    uint8_t *rx,
+    uint8_t rx_len,
+    void *user_ctx
+)
 {
     TwoWire *wire = (TwoWire *)user_ctx;
     uint8_t requested = (uint8_t)wire->requestFrom((int)address, (int)rx_len);
@@ -195,11 +283,11 @@ static void arduino_delay_ms(uint16_t delay_ms, void *user_ctx)
     delay((unsigned long)delay_ms);
 }
 
-void sensor_setup_example(void)
+void setup(void)
 {
-    static vl53l0x_template_t sensor;
     vl53l0x_template_cfg_t cfg;
 
+    Serial.begin(115200);
     Wire.begin();
 
     cfg.i2c_write = arduino_i2c_write;
@@ -210,9 +298,62 @@ void sensor_setup_example(void)
     cfg.poll_interval_ms = 10u;
     cfg.max_poll_count = 100u;
 
-    (void)vl53l0x_template_init(&sensor, &cfg);
+    vl53l0x_status_t status = vl53l0x_template_init(&sensor, &cfg);
+    if (status != VL53L0X_OK) {
+        Serial.print("Template initialization failed: ");
+        Serial.println((int)status);
+    } else {
+        sensor_ready = true;
+        Serial.println("VL53L0X ready");
+    }
+}
+
+void loop(void)
+{
+    if (!sensor_ready) {
+        delay(1000u);
+        return;
+    }
+
+    vl53l0x_measurement_t measurement;
+    uint16_t attempts = 0u;
+    vl53l0x_status_t status = vl53l0x_template_get_measurement(
+        &sensor,
+        SENSOR_ADDRESS,
+        VL53L0X_UNIT_MM,
+        &measurement,
+        &attempts
+    );
+
+    if (status == VL53L0X_OK) {
+        Serial.print("Range: ");
+        Serial.print(measurement.range_mm);
+        Serial.print(" mm, status: ");
+        Serial.print(measurement.status);
+        Serial.print(", sigma: ");
+        Serial.print(measurement.sigma_mm);
+        Serial.print(" mm, SPAD count: ");
+        Serial.print(measurement.spad_count);
+        Serial.print(", attempts: ");
+        Serial.println(attempts);
+    } else {
+        Serial.print("Measurement failed, API error: ");
+        Serial.println((int)status);
+    }
+
+    delay(200u);
 }
 ```
+
+Expected output includes a repeated line similar to:
+
+```text
+Range: 245 mm, status: 0, sigma: 12 mm, SPAD count: 20, attempts: 1
+```
+
+Range, status, sigma, SPAD count, and attempt count depend on the target and
+scene. API error `2` is `VL53L0X_ERR_IO`, meaning an I2C read or write failed.
+Check the detected address, `SENSOR_ADDRESS`, and the wiring.
 
 ## Example: Generic C Platform Integration
 
@@ -292,9 +433,10 @@ Utilities:
 - `vl53l0x_template_status_text`
 - `vl53l0x_template_convert_range`
 
-## Demo Function (One-Shot + Continuous)
+## Demo Functions (One-Shot + Continuous)
 
-The file `vl53l0x_template_demo.c` includes two minimal entry points:
+The file `vl53l0x_template_demo.c` includes three entry points, declared in
+`vl53l0x_template.h`:
 
 - `vl53l0x_template_demo_run(...)`
 - `vl53l0x_template_demo_run_all(...)`
@@ -305,7 +447,7 @@ Behavior:
 - Performs one one-shot measurement first
 - Then runs a continuous loop for `max_samples` iterations
 - Uses `period_ms` delay between samples
-- Prints parsed values using the same template API
+- Prints parsed range, status, signal, ambient, sigma, and SPAD count values
 
 Example call:
 
@@ -375,16 +517,26 @@ Behavior:
 - Runs `10` acquisition cycles
 - Reads devices `0x70`, `0x71`, and `0x72` in each cycle
 - Waits `200 ms` between cycles
-- Prints range, status text, signal, ambient, SPAD count, and poll attempts for each device
+- Prints range, status text, signal, ambient, sigma, SPAD count, and poll attempts for each device
 - The reusable bulk helper fills one measurement, attempt counter, and status per address
 
 This makes it easy to validate integration quickly in a new project before wiring your full application logic.
 
 ## Polling and Status Behavior
 
-`vl53l0x_template_get_measurement` does not validate or filter measurement status codes. It retries only when the received range and status are both `0xFFFF` and `0xFF`, respectively. An I2C callback error returns `VL53L0X_ERR_IO`; exhausting `max_poll_count` with only sentinel frames returns `VL53L0X_ERR_TIMEOUT`.
+`vl53l0x_template_get_measurement` accepts statuses `0`, `1`, `2`, `3`, `4`,
+and `12`; other statuses are retried until `max_poll_count` is reached. For
+status `3` (`BELOW_THRESHOLD`), the returned range is forced to `0`. For
+statuses `2` (`SIGNAL_LOW`), `4` (`PHASE_OUT_OF_LIMIT`), and `12`
+(`SIGNAL_TOO_LOW`), the returned range is forced to `max_range_mm`. An I2C
+callback error returns `VL53L0X_ERR_IO`; exhausting the poll count returns
+`VL53L0X_ERR_TIMEOUT`.
 
-`vl53l0x_template_status_is_accepted` currently returns `true` for every status. The demo therefore reports status text without rejecting measurements. `vl53l0x_template_convert_range` currently returns the supplied range unchanged; it does not convert between millimeters, centimeters, and inches. The `VL53L0X_UNIT_*` value is sent to the target as part of the ranging command, so confirm its meaning with the target firmware.
+`vl53l0x_template_convert_range` converts a range in millimeters to
+centimeters or inches (rounded to the nearest whole unit); millimeters and
+unknown unit values return the range unchanged. The `VL53L0X_UNIT_*` value is
+also sent to the target as part of the ranging command, so confirm its meaning
+with the target firmware.
 
 ## Porting Checklist for a New Project
 

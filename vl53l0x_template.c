@@ -200,18 +200,23 @@ vl53l0x_status_t vl53l0x_template_get_measurement(
         measurement->status = frame[2];
         measurement->signal_kcps = get_u16_be(&frame[3]);
         measurement->ambient_kcps = get_u16_be(&frame[5]);
+        measurement->sigma_mm = get_u16_be(&frame[7]);
         measurement->ambient_per_spad_kcps = get_u16_be(&frame[9]);
         measurement->signal_per_spad_kcps = get_u16_be(&frame[11]);
         measurement->spad_count = get_u16_be(&frame[13]);
 
-        if ((measurement->range_mm == 0xFFFFu) && (measurement->status == 0xFFu)) {
-            continue;
-        }
+        if (vl53l0x_template_status_is_accepted(measurement->status)) {
+            if (measurement->status == 3u) {
+                measurement->range_mm = 0u;
+            } else if ((measurement->status == 2u) || (measurement->status == 4u) || (measurement->status == 12u)) {
+                measurement->range_mm = ctx->cfg.max_range_mm;
+            }
 
-        if (attempts != NULL) {
-            *attempts = (uint16_t)(i + 1u);
+            if (attempts != NULL) {
+                *attempts = (uint16_t)(i + 1u);
+            }
+            return VL53L0X_OK;
         }
-        return VL53L0X_OK;
     }
 
     if (attempts != NULL) {
@@ -261,8 +266,7 @@ vl53l0x_status_t vl53l0x_template_get_measurements(
 
 bool vl53l0x_template_status_is_accepted(uint8_t status)
 {
-    (void)status;
-    return true;
+    return (status == 0u) || (status == 1u) || (status == 2u) || (status == 3u) || (status == 4u) || (status == 12u);
 }
 
 const char *vl53l0x_template_status_text(uint8_t status)
@@ -288,6 +292,13 @@ const char *vl53l0x_template_status_text(uint8_t status)
 
 uint16_t vl53l0x_template_convert_range(uint16_t range_mm, uint8_t units)
 {
-    (void)units;
-    return range_mm;
+    switch (units) {
+        case VL53L0X_UNIT_CM:
+            return (uint16_t)(((uint32_t)range_mm + 5u) / 10u);
+        case VL53L0X_UNIT_INCH:
+            return (uint16_t)((((uint32_t)range_mm * 100u) + 1270u) / 2540u);
+        case VL53L0X_UNIT_MM:
+        default:
+            return range_mm;
+    }
 }

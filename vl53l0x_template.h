@@ -54,6 +54,7 @@ typedef struct {
     uint8_t status;
     uint16_t signal_kcps;
     uint16_t ambient_kcps;
+    uint16_t sigma_mm;
     uint16_t ambient_per_spad_kcps;
     uint16_t signal_per_spad_kcps;
     uint16_t spad_count;
@@ -112,6 +113,31 @@ vl53l0x_status_t vl53l0x_template_get_measurements(
 bool vl53l0x_template_status_is_accepted(uint8_t status);
 const char *vl53l0x_template_status_text(uint8_t status);
 uint16_t vl53l0x_template_convert_range(uint16_t range_mm, uint8_t units);
+
+void vl53l0x_template_demo_run(
+    vl53l0x_template_t *ctx,
+    uint8_t dev_address,
+    uint8_t units,
+    uint16_t period_ms,
+    uint16_t max_samples
+);
+void vl53l0x_template_demo_run_all(
+    vl53l0x_template_t *ctx,
+    const uint8_t *dev_addresses,
+    uint8_t dev_count,
+    uint8_t units,
+    uint16_t period_ms,
+    uint16_t max_cycles
+);
+void vl53l0x_template_demo_run_all_simultaneous(
+    vl53l0x_template_t *ctx,
+    const uint8_t *dev_addresses,
+    uint8_t dev_count,
+    uint8_t units,
+    uint16_t wait_ms,
+    uint16_t period_ms,
+    uint16_t max_cycles
+);
 
 #ifdef __cplusplus
 }

@@ -96,11 +96,12 @@ void vl53l0x_template_demo_run(
         vl53l0x_measurement_t m;
         uint16_t attempts = 0u;
         if (vl53l0x_template_get_measurement(ctx, dev_address, units, &m, &attempts) == VL53L0X_OK) {
-            printf("[one-shot] range=%u status=%u signal=%u ambient=%u sigma=%u attempts=%u\r\n",
+            printf("[one-shot] range=%u status=%u signal=%u ambient=%u sigma=%u spad=%u attempts=%u\r\n",
                    vl53l0x_template_convert_range(m.range_mm, units),
                    m.status,
                    m.signal_kcps,
                    m.ambient_kcps,
+                   m.sigma_mm,
                    m.spad_count,
                    attempts);
         } else {
@@ -113,13 +114,14 @@ void vl53l0x_template_demo_run(
         vl53l0x_measurement_t m;
         uint16_t attempts = 0u;
         if (vl53l0x_template_get_measurement(ctx, dev_address, units, &m, &attempts) == VL53L0X_OK) {
-            printf("[continuous %u/%u] range=%u status=%u signal=%u ambient=%u sigma=%u attempts=%u\r\n",
+            printf("[continuous %u/%u] range=%u status=%u signal=%u ambient=%u sigma=%u spad=%u attempts=%u\r\n",
                    (unsigned int)(i + 1u),
                    (unsigned int)max_samples,
                    vl53l0x_template_convert_range(m.range_mm, units),
                    m.status,
                    m.signal_kcps,
                    m.ambient_kcps,
+                   m.sigma_mm,
                    m.spad_count,
                    attempts);
         } else {
@@ -171,13 +173,14 @@ void vl53l0x_template_demo_run_all(
 
         for (index = 0u; index < dev_count; index++) {
             if (statuses[index] == VL53L0X_OK) {
-                printf("  [0x%02X] range=%u status=%u (%s) signal=%u ambient=%u spad=%u attempts=%u\r\n",
+                printf("  [0x%02X] range=%u status=%u (%s) signal=%u ambient=%u sigma=%u spad=%u attempts=%u\r\n",
                        dev_addresses[index],
                        vl53l0x_template_convert_range(measurements[index].range_mm, units),
                        measurements[index].status,
                        vl53l0x_template_status_text(measurements[index].status),
                        measurements[index].signal_kcps,
                        measurements[index].ambient_kcps,
+                       measurements[index].sigma_mm,
                        measurements[index].spad_count,
                        attempts[index]);
             } else {
